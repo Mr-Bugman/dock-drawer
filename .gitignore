@@ -1,0 +1,8 @@
+.DS_Store
+config.json
+
+# 本地定稿资产 / 构建产物 / 私人协作记录：不随公开仓库分发
+Resources/AppIcon.icns
+Resources/AppIcon.iconset/
+build/
+.zcode/
