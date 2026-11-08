@@ -1,6 +1,26 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - 两级面板共用的头部圆形按钮
+//
+// 28×28 的大判定区域，别再只有图标那么一丁点
+
+private func headerButton(_ systemName: String, _ help: String,
+                          targeted: Bool = false,
+                          action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        Image(systemName: systemName)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.primary.opacity(0.8))
+            .frame(width: 28, height: 28)
+            .background(Circle().fill(targeted ? Color.accentColor.opacity(0.45)
+                                               : Color.primary.opacity(0.08)))
+            .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .help(help)
+}
+
 // MARK: - 面板根视图
 
 struct PanelRootView: View {
@@ -92,37 +112,54 @@ struct TopStripView: View {
     }
 
     var body: some View {
-        Group {
-            if store.items.isEmpty {
-                Text("空空如也，点「整理 App」添加")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .padding(24)
-            } else {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(Array(store.items.enumerated()), id: \.element.id) { index, item in
-                        switch item {
-                        case .folder(let folder):
-                            FolderIconView(folder: folder, index: index)
-                        case .app(let app):
-                            AppTileView(app: app, index: index)
+        VStack(spacing: 6) {
+            header
+            Group {
+                if store.items.isEmpty {
+                    Text("空空如也，点「整理 App」添加")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .padding(24)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(Array(store.items.enumerated()), id: \.element.id) { index, item in
+                            switch item {
+                            case .folder(let folder):
+                                FolderIconView(folder: folder, index: index)
+                            case .app(let app):
+                                AppTileView(app: app, index: index)
+                            }
                         }
                     }
+                    // 顶部间距已由 header + VStack spacing 提供，这里不再叠加
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    // 拖拽排序时其他图标流畅让位
+                    .animation(.spring(response: 0.32, dampingFraction: 0.8),
+                               value: store.items.map { $0.id })
                 }
-                .padding(16)
-                // 拖拽排序时其他图标流畅让位
-                .animation(.spring(response: 0.32, dampingFraction: 0.8),
-                           value: store.items.map { $0.id })
+            }
+            .onDrop(of: [.plainText, .fileURL], isTargeted: nil) { providers in
+                DropCoordinator.handle(providers: providers, target: .topSlot(insertIndex: nil))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // 点面板空白处：编辑模式下先退出编辑
+                if controller.editMode { withAnimation { controller.editMode = false } }
             }
         }
-        .onDrop(of: [.plainText, .fileURL], isTargeted: nil) { providers in
-            DropCoordinator.handle(providers: providers, target: .topSlot(insertIndex: nil))
+    }
+
+    /// 一级面板唯一的设置入口：右上角圆形按钮，点它打开整理窗口
+    private var header: some View {
+        HStack {
+            Spacer()
+            headerButton("slider.horizontal.3", "打开整理窗口") { controller.openManager() }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // 点面板空白处：编辑模式下先退出编辑
-            if controller.editMode { withAnimation { controller.editMode = false } }
-        }
+        .frame(height: 28)
+        // 按钮距面板上边 / 右边同为 16，避免贴顶
+        .padding(.top, 16)
+        .padding(.horizontal, 16)
     }
 }
 
@@ -401,26 +438,10 @@ struct DrawerView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .lineLimit(1)
             Spacer()
-            headerButton("slider.horizontal.3", "打开整理窗口") { controller.openManager() }
+            // 设置入口只保留在一级面板；这里留等宽占位，保持文件夹名居中
+            Color.clear.frame(width: 28, height: 28)
         }
         .frame(height: 28)
-    }
-
-    /// 头部圆形小按钮：28×28 的大判定区域，别再只有图标那么一丁点
-    private func headerButton(_ systemName: String, _ help: String,
-                              targeted: Bool = false,
-                              action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.primary.opacity(0.8))
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(targeted ? Color.accentColor.opacity(0.45)
-                                                   : Color.primary.opacity(0.08)))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 
     private var emptyState: some View {
