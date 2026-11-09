@@ -9,18 +9,29 @@ Dock 常驻一个图标（当前为辅助型形态 LSUIElement，无运行黑点
 点击弹出现代玻璃质感面板 → **一级页面**：文件夹磁贴与直接摆放的 App 图标混排 →
 点文件夹弹**二级网格抽屉**（与一级同一套网格样式）→ 点 App 图标启动。
 
-- 目标用户：开发者本人（作者），中文界面
+- 目标用户：开发者本人（作者）+ 公开仓库的普通用户（下载 dmg 安装），中文界面
 - 数据：`~/Library/Application Support/DockDrawer/config.json`（TopItem 混排格式，手写 Codable）
 - 运行身份：`com.chai.dockdrawer.v2`（v1 缓存顽固，已弃用，**不要再改回**）
 - 安装位置：`/Applications/Dock 抽屉.app`
+- 运行门槛：**macOS 27.0+ / Apple 芯片**。源码用了 `NSGlassEffectView.effectIsInteractive`（27.0 API），
+  `Info.plist` 的 `LSMinimumSystemVersion` 已同步改为 27.0；macOS 27 起系统不再支持 Intel Mac，
+  编译产物为 arm64。旧系统 / Intel Mac 装了会崩，安装说明里已写明。
 
 ## 二、构建 / 安装 / 测试
 
 ```bash
-bash build.sh                    # 编译到 build/Dock 抽屉.app（CLT swiftc，无需 Xcode）
-swift Scripts/make_icon.swift    # 重新生成应用图标 icns（读真实名单取图标）
-swift /tmp/xxx.swift             # 逻辑测试见 README"测试"节
+bash build.sh                        # 编译到 build/Dock 抽屉.app（CLT swiftc，无需 Xcode）
+bash Scripts/build_release.sh        # 发布打包：从源码独立编译 + 公开图标 + 生成 dmg
+swift Scripts/make_icon.swift        # 【本机专用】本地定稿图标，读真实名单取 4 个 App 图标
+swift Scripts/make_release_icon.swift# 【公开版】原创抽象图标，不读名单、无第三方 App 图标
+swift /tmp/xxx.swift                 # 逻辑测试见 README"构建"节
 ```
+
+**两套图标，不要混用**（详见 R2 与 README「行为要点」）：
+`Resources/AppIcon.icns` = 作者本地定稿、含真实 App 图标、被 `.gitignore` 排除、不可公开分发；
+`Resources/Release/AppIcon.icns` = 原创公开版、随仓库与 dmg 分发。
+`build.sh` 优先取本地定稿，缺失时回退公开版；`build_release.sh` **只**用公开版，
+且刻意不复用 `build/` 产物（避免把本地定稿图标打进安装包）。
 
 安装（**必须按此顺序**，见铁律 R1）：
 ```bash
@@ -49,10 +60,14 @@ DOCKDRAWER_DATA_DIR=/tmp/ddtest /tmp/storetest    # 20 项断言
 - `Sources/PanelController.swift` — 面板窗口/定位/外部点击收起判定/拖拽会话 DragSessionTracker/三个 DropDelegate/BackButtonDropDelegate
 - `Sources/PanelViews.swift` — TopStripView（一级混排）/DrawerView（二级网格）/FolderIconView/AppTileView/DrawerAppIcon/RemoveBadge/WiggleEffect
 - `Sources/ManagerWindow.swift` — 整理窗口（侧栏 + 详情网格 + 设置）
-- `Sources/AppIconFactory.swift` — **已废弃但保留**（动态图标机制被作者否决，勿重新启用或调用）
 - `Sources/GlassPreview.swift` — 图标/气泡候选预览渲染器（调试用）
-- `Scripts/make_icon.swift` — 生成 icns（读真实名单前 4 个 App；**作者已定稿深灰渐变底板 0.76→0.50 + 2×2 真实图标**）
+  （动态图标机制 `AppIconFactory` 已被作者否决并删除，**勿重新实现或调用**）
+- `Scripts/make_icon.swift` — 【本机专用】生成 icns（读真实名单前 4 个 App；**作者已定稿深灰渐变底板 0.76→0.50 + 2×2 真实图标**）
+- `Scripts/make_release_icon.swift` — 【公开版】生成原创抽象 icns 到 `Resources/Release/`，不读名单
+- `Scripts/build_release.sh` — 发布打包：独立编译 + 公开图标 + ad-hoc 签名 + hdiutil 出 dmg
 - `Scripts/store_test.swift` — Store 逻辑测试
+- `安装说明.txt` — 面向普通用户的安装/使用说明，随 dmg 一起打包
+- `Resources/Release/AppIcon.icns` — 原创公开版图标（多尺寸 16~1024，可公开分发）
 
 ## 四、铁律（每条都踩过坑，违反 = 回炉）
 
@@ -63,8 +78,11 @@ DOCKDRAWER_DATA_DIR=/tmp/ddtest /tmp/storetest    # 20 项断言
 ### R2. 图标画稿必须完全不透明（alpha=1.0 铺满画布）
 macOS 26+ 给半透明图标垫玻璃底板：灰边、嵌套观感全因它。旋转(frameRotation 会崩)/layer.transform/
 layer.mask/容器融合/换 bundle 标识/清缓存**全部无效**——系统在合成器层面垫板。
-作者最终定稿：**不透明深灰渐变底板（0.76→0.50）铺满画布 + 4 个真实 App 图标 2×2**。
+作者最终定稿（本地自用版）：**不透明深灰渐变底板（0.76→0.50）铺满画布 + 4 个真实 App 图标 2×2**。
 "半透磨砂"与"干净边缘"在静态 icns 里二选一，作者选了后者。
+**公开分发版**（`Resources/Release/AppIcon.icns`）沿用同一套不透明底板与高光描边参数，
+只把 2×2 内容换成原创抽象几何，避免把第三方 App 图标随公开仓库/安装包分发出去；
+生成新图标时同样必须保证画布 alpha 全为 1.0。
 
 ### R3. 禁止 NSWorkspace.setIcon(forFile: bundlePath)
 自定义图标会和 icns 叠加显示成嵌套方块。若曾注册过：`setIcon(nil, forFile:)` 清除 +
@@ -143,12 +161,17 @@ Color.red 等在 cacheDisplay 下变灰。需要精确颜色的 UI（徽章等�
 
 - 启动台拖不出 App（系统限制，已向作者说明）
 - 不收文件/文件夹/网址（只收 App）
-- 不签名公证（自己用；首次打开右键 → 打开放行）
-- 图标静态：名单变化不刷新 Dock 图标（重跑 make_icon.swift + 重打包可刷新）
+- 不签名公证：ad-hoc 签名，普通用户首次打开需「右键 → 打开」放行（`安装说明.txt` 已写明）
+- 图标静态：名单变化不刷新 Dock 图标；换图标只能替换对应 icns 后重打包（动态机制已否决）
 - 抽屉内多级子文件夹：未做
+- 只支持 macOS 27+ / Apple 芯片（见第一节运行门槛）
 
 ## 八、协作流程约定
 
 - 改动后必须：`bash build.sh` 零错误 → 快照/真机验证 → 按第二节安装 → 让作者验收
 - 验收以作者的 Dock 实际观感为准；离屏快照仅验证内容结构，玻璃/透明效果不可见
 - 每次踩新坑：更新本文件铁律章节 + 外部记忆文件
+- **发布流程**：`bash Scripts/build_release.sh` 出 dmg → 挂载核对内容/图标/说明 →
+  提交源码与文档（用公开仓库身份，勿带真名）→ 打 tag 并把 dmg 上传为 GitHub Release 资产。
+  发布属上线动作，**必须先拿到作者明确授权**；推送前复查 diff 无真名/本机路径/私人名单。
+  注意 `build/` 里的 dmg 被 `.gitignore` 排除，只作为 Release 资产上传，不进仓库。
